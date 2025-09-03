@@ -96,7 +96,7 @@ class DataFrame:
             def __init__(self, df, key):
                 self.df = df
                 self.key = key
-            def apply(self, func):
+            def apply(self, func, include_groups=False):
                 groups = {}
                 for row in self.df.data:
                     groups.setdefault(row[self.key], []).append(row)
