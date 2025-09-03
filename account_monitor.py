@@ -793,7 +793,10 @@ def export_excel_snapshot(now_ny: datetime,
                 g["cumulative_return_pct"] = (1.0 + g["daily_return_pct"].fillna(0.0)).cumprod() - 1.0
                 g["rolling_pnl_usd"] = g["daily_return_usd"].fillna(0.0).cumsum()
                 return g
-            df_hist = df_hist.groupby("account", group_keys=False).apply(_add_cum_rolling)
+            df_hist = (
+                df_hist.groupby("account", group_keys=False)
+                       .apply(_add_cum_rolling, include_groups=False)
+            )
         frames["History"] = _sanitize_df_for_excel(df_hist)
 
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
