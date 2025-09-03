@@ -773,6 +773,10 @@ def export_excel_snapshot(now_ny: datetime,
 
     # History (cumulative return % and rolling P&L)
     if os.environ.get("EXCEL_APPEND_HISTORY", "1").lower() in ("1","true","yes","on"):
+        # Ensure the current snapshot is present in history before reading.
+        # This allows the History sheet to include at least today's values on a
+        # fresh run where no history.csv exists yet.
+        _append_history(now_ny.strftime("%Y-%m-%d"), accounts_values, quote_ccy)
         hist_path = _history_csv_path()
         if os.path.exists(hist_path):
             df_hist = pd.read_csv(hist_path)
