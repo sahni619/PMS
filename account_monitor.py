@@ -322,8 +322,11 @@ def _is_final(ex_id: str, kind: str, status) -> bool:
     if _trust_nonfinal():
         return True
     ex_id = (ex_id or "").lower()
+    direction = (kind or "").lower()
+    if direction == "withdrawal":
+        direction = "withdraw"
     try:
-        return _status_is_final(ex_id, kind, status)
+        return _status_is_final(ex_id, direction, status)
     except ValueError:
         s = str(status).strip().lower()
         return s in {"ok", "completed", "complete", "success", "succeeded", "done"}
