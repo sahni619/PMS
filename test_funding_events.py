@@ -1,6 +1,8 @@
 import json
+import os
 import sys
 import types
+from datetime import datetime
 
 ccxt_stub = types.SimpleNamespace()
 sys.modules.setdefault("ccxt", ccxt_stub)
@@ -80,4 +82,68 @@ def test_raw_attempt_and_dedup(monkeypatch):
     methods = {a["method"] for a in attempts}
     assert "fetch_deposits" in methods
     assert "binance_raw" in methods
+
+
+def test_missing_price_flows_reflected_in_excel(monkeypatch, tmp_path):
+    events = [
+        {"id": "1", "type": "deposit", "currency": "ABC", "amount": 10},
+        {"id": "2", "type": "withdrawal", "currency": "DEF", "amount": 3},
+    ]
+
+    monkeypatch.setattr(am, "fetch_funding_events_raw", lambda ex, label: events)
+    monkeypatch.setattr(am, "tg_send", lambda *a, **k: None)
+
+    logs = []
+
+    def fake_trace(label, lines):
+        logs.extend(lines)
+
+    monkeypatch.setattr(am, "_trace_flow", fake_trace)
+
+    state = {"__val_now_post": 100.0}
+    am.poll_and_apply_funding(object(), "LBL", {}, "USDT", state)
+
+    assert state["net_flows"] == 7
+    assert any("valuation missing" in l for l in logs)
+
+    written = {}
+
+    class DummyDF:
+        def __init__(self, rows):
+            self.rows = rows
+            self.columns = list(rows[0].keys()) if rows else []
+
+        def to_excel(self, writer, index=False, sheet_name=None):
+            written[sheet_name] = self.rows
+
+    class DummyWriter:
+        def __init__(self, path, engine=None):
+            self.path = path
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            pass
+
+    monkeypatch.setattr(
+        am,
+        "pd",
+        types.SimpleNamespace(DataFrame=DummyDF, ExcelWriter=DummyWriter),
+    )
+    monkeypatch.setattr(am, "_sanitize_df_for_excel", lambda df: df)
+    monkeypatch.setattr(am, "ensure_dir", lambda p: str(tmp_path))
+    os.environ["EXCEL_APPEND_HISTORY"] = "0"
+    os.environ["EXCEL_DIR"] = str(tmp_path)
+
+    am.export_excel_snapshot(
+        datetime(2023, 1, 1),
+        {"LBL": state},
+        {},
+        {},
+        {},
+        "USDT",
+    )
+
+    assert written["Snapshot"][0]["Net_Flows"] == 7
 
