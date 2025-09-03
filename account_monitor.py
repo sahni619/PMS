@@ -615,18 +615,20 @@ def poll_and_apply_funding(ex, label: str, prices: Dict[str, float], quote_ccy: 
         amt = float(ev.get("amount") or 0.0)
         px  = prices.get(ccy) or (1.0 if ccy == quote_ccy else None)
         val = amt * px if px else None
+        if val is None:
+            _trace_flow(label, [f"valuation missing for {ccy}, using raw amount {amt}"])
+
+        flow_val = val if val is not None else amt
 
         if ev.get("type") == "deposit":
             pre = max(val_now_post - (val or 0.0), 0.0)
             close_twr_segment(st, pre, V_start_next=val_now_post)
-            if val is not None:
-                st["net_flows"] = float(st.get("net_flows", 0.0)) + float(val)
+            st["net_flows"] = float(st.get("net_flows", 0.0)) + float(flow_val)
             kind = "Deposit"
         else:
             pre = val_now_post + (val or 0.0)
             close_twr_segment(st, pre, V_start_next=val_now_post)
-            if val is not None:
-                st["net_flows"] = float(st.get("net_flows", 0.0)) - float(val)
+            st["net_flows"] = float(st.get("net_flows", 0.0)) - float(flow_val)
             kind = "Withdrawal"
 
         try:
