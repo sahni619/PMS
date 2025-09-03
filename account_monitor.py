@@ -50,6 +50,7 @@ import matplotlib.pyplot as plt
 
 # data/export
 import pandas as pd
+from final_statuses import is_final as _status_is_final
 
 NY_TZ = pytz.timezone("America/New_York")
 STATE_PATH = os.environ.get("STATE_PATH", ".monitor_state.json")
@@ -315,43 +316,16 @@ def _ms(ts) -> Optional[int]:
 def _trust_nonfinal() -> bool:
     return os.environ.get("FLOW_TRUST_NONFINAL", "0").lower() in ("1","true","yes","on")
 
-def _status_final_binance(kind: str, status) -> bool:
-    s = str(status).strip().lower()
-    try:
-        n = int(status)
-    except Exception:
-        n = None
-    if _trust_nonfinal():
-        return True
-    if kind == "deposit":
-        return (n == 1) or (s in {"1","success","credited","completed","complete"})
-    else:
-        return (n == 6) or (s in {"6","completed","complete","success"})
-
-def _status_final_bybit(kind: str, status) -> bool:
-    if _trust_nonfinal():
-        return True
-    s = str(status).strip().lower()
-    return s in {"success","succeeded","ok","completed","complete"}
-
-def _status_final_okx(kind: str, status) -> bool:
-    if _trust_nonfinal():
-        return True
-    s = str(status).strip().lower()
-    return s in {"2","success","completed","complete","ok"}
 
 def _is_final(ex_id: str, kind: str, status) -> bool:
-    ex_id = (ex_id or "").lower()
-    if ex_id == "binance":
-        return _status_final_binance(kind, status)
-    if ex_id == "bybit":
-        return _status_final_bybit(kind, status)
-    if ex_id == "okx":
-        return _status_final_okx(kind, status)
     if _trust_nonfinal():
         return True
-    s = str(status).strip().lower()
-    return s in {"ok", "completed", "complete", "success", "succeeded", "done"}
+    ex_id = (ex_id or "").lower()
+    try:
+        return _status_is_final(ex_id, kind, status)
+    except ValueError:
+        s = str(status).strip().lower()
+        return s in {"ok", "completed", "complete", "success", "succeeded", "done"}
 
 # ---- Raw per-venue (multi-endpoint) ----
 
