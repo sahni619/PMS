@@ -306,12 +306,12 @@ def _ms(ts) -> Optional[int]:
     if ts is None:
         return None
     try:
-        return int(ts)
+        t = float(ts)
     except Exception:
-        try:
-            return int(float(ts) * 1000)
-        except Exception:
-            return None
+        return None
+    if abs(t) < 10 ** 12:
+        t *= 1000
+    return int(t)
 
 def _trust_nonfinal() -> bool:
     return os.environ.get("FLOW_TRUST_NONFINAL", "0").lower() in ("1","true","yes","on")
