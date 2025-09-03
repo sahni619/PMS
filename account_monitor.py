@@ -42,6 +42,7 @@ import ccxt
 from dotenv import load_dotenv
 import requests
 import pytz
+from event_deduplicator import deduplicate_events
 
 # plotting
 import matplotlib
@@ -523,7 +524,8 @@ def fetch_funding_events_raw(ex, label: str, lookback_days: Optional[int] = None
     until_ms = now_ms
 
     attempts = []
-    events: List[Dict[str, Any]] = []
+    ccxt_events: List[Dict[str, Any]] = []
+    raw_events: List[Dict[str, Any]] = []
 
     # ccxt helpers first
     try:
@@ -533,7 +535,7 @@ def fetch_funding_events_raw(ex, label: str, lookback_days: Optional[int] = None
                 ts = _ms(d.get("timestamp"))
                 if ts is None or ts < since_ms or ts > until_ms:
                     continue
-                events.append({
+                ccxt_events.append({
                     "id": str(d.get("id") or d.get("txid") or f"dep_{ts}"),
                     "type": "deposit",
                     "timestamp": ts,
@@ -552,7 +554,7 @@ def fetch_funding_events_raw(ex, label: str, lookback_days: Optional[int] = None
                 ts = _ms(w.get("timestamp"))
                 if ts is None or ts < since_ms or ts > until_ms:
                     continue
-                events.append({
+                ccxt_events.append({
                     "id": str(w.get("id") or w.get("txid") or f"wdr_{ts}"),
                     "type": "withdrawal",
                     "timestamp": ts,
@@ -564,37 +566,33 @@ def fetch_funding_events_raw(ex, label: str, lookback_days: Optional[int] = None
     except Exception as e:
         attempts.append({"method": "fetch_withdrawals", "ok": False, "err": repr(e)})
 
-    # raw fallback if nothing
-    if not events:
-        try:
-            if ex_id == "binance":
-                d, w = _binance_raw(ex, since_ms, until_ms)
-            elif ex_id == "bybit":
-                d, w = _bybit_raw(ex, since_ms, until_ms)
-            elif ex_id == "okx":
-                d, w = _okx_raw(ex, since_ms, until_ms)
-            else:
-                d, w = [], []
-            events.extend(d + w)
-            attempts.append({"method": f"{ex_id}_raw", "ok": True, "count": len(d) + len(w)})
-        except Exception as e:
-            attempts.append({"method": f"{ex_id}_raw", "ok": False, "err": repr(e)})
+    # raw calls always
+    try:
+        if ex_id == "binance":
+            d, w = _binance_raw(ex, since_ms, until_ms)
+        elif ex_id == "bybit":
+            d, w = _bybit_raw(ex, since_ms, until_ms)
+        elif ex_id == "okx":
+            d, w = _okx_raw(ex, since_ms, until_ms)
+        else:
+            d, w = [], []
+        raw_events.extend(d + w)
+        attempts.append({"method": f"{ex_id}_raw", "ok": True, "count": len(d) + len(w)})
+    except Exception as e:
+        attempts.append({"method": f"{ex_id}_raw", "ok": False, "err": repr(e)})
+
+    # combine and deduplicate before final status filtering
+    combined = deduplicate_events([ccxt_events, raw_events])
 
     # keep only final (or all if FLOW_TRUST_NONFINAL=1)
     filtered: List[Dict[str, Any]] = []
-    for ev in events:
+    for ev in combined:
         kind = ev.get("type")
         st = ev.get("status")
         if _is_final(ex_id, kind, st):
             filtered.append(ev)
 
-    # de-dupe
-    dedup = {}
-    for ev in filtered:
-        if not ev.get("id"):
-            ev["id"] = f"{ev.get('type','?')}-{ev.get('currency','?')}-{ev.get('timestamp',0)}"
-        dedup[ev["id"]] = ev
-    out = sorted(dedup.values(), key=lambda r: r.get("timestamp", 0))
+    out = sorted(filtered, key=lambda r: r.get("timestamp", 0))
 
     # tracing (full, untruncated)
     _trace_flow(label, [f"FUNDING attempts FULL: {json.dumps(attempts)}"])
