@@ -556,7 +556,7 @@ def fetch_funding_events_raw(ex, label: str, lookback_days: Optional[int] = None
         attempts.append({"method": f"{ex_id}_raw", "ok": False, "err": repr(e)})
 
     # combine and deduplicate before final status filtering
-    combined = deduplicate_events([ccxt_events, raw_events])
+    combined = deduplicate_events([ccxt_events, raw_events], ex_id)
 
     # keep only final (or all if FLOW_TRUST_NONFINAL=1)
     filtered: List[Dict[str, Any]] = []

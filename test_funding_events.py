@@ -23,7 +23,7 @@ sys.modules.setdefault("pandas", pandas_stub)
 import account_monitor as am
 
 
-def test_raw_attempt_and_dedup(monkeypatch):
+def test_pending_ccxt_event_replaced_by_final_raw(monkeypatch):
     class DummyEx:
         id = "binance"
 
@@ -73,7 +73,10 @@ def test_raw_attempt_and_dedup(monkeypatch):
     events = am.fetch_funding_events_raw(ex, "LBL", lookback_days=1)
 
     assert called["raw"] is True
-    assert events == []
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["id"] == "1"
+    assert ev["status"] == "success"
 
     attempt_line = next(l for l in logs if l.startswith("FUNDING attempts FULL:"))
     attempts = json.loads(attempt_line.split(":", 1)[1].strip())
