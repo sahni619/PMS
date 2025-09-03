@@ -87,6 +87,32 @@ def test_pending_ccxt_event_replaced_by_final_raw(monkeypatch):
     assert "binance_raw" in methods
 
 
+def test_final_withdrawal_event_survives(monkeypatch):
+    class DummyEx:
+        id = "binance"
+
+        def fetch_deposits(self, since=None):
+            return []
+
+        def fetch_withdrawals(self, since=None):
+            return [
+                {
+                    "id": "w1",
+                    "timestamp": (since or 0) + 1000,
+                    "currency": "BTC",
+                    "amount": 1,
+                    "status": "5",
+                }
+            ]
+
+    monkeypatch.setattr(am, "_binance_raw", lambda ex, since_ms, until_ms: ([], []))
+
+    events = am.fetch_funding_events_raw(DummyEx(), "LBL", lookback_days=1)
+
+    assert len(events) == 1
+    assert events[0]["id"] == "w1"
+    assert events[0]["status"] == "5"
+
 def test_missing_price_flows_reflected_in_excel(monkeypatch, tmp_path):
     events = [
         {"id": "1", "type": "deposit", "currency": "ABC", "amount": 10},
