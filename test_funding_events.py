@@ -87,6 +87,45 @@ def test_pending_ccxt_event_replaced_by_final_raw(monkeypatch):
     assert "binance_raw" in methods
 
 
+def test_non_final_event_logged_and_skipped(monkeypatch):
+    class DummyEx:
+        id = "binance"
+
+        def fetch_deposits(self, since=None):
+            return [
+                {
+                    "id": "1",
+                    "timestamp": since + 1000,
+                    "currency": "BTC",
+                    "amount": 1,
+                    "status": "pending",
+                }
+            ]
+
+        def fetch_withdrawals(self, since=None):
+            return []
+
+    ex = DummyEx()
+
+    # no raw events available
+    monkeypatch.setattr(am, "_binance_raw", lambda ex, s, u: ([], []))
+
+    logs = []
+
+    def fake_trace(label, lines):
+        logs.extend(lines)
+
+    monkeypatch.setattr(am, "_trace_flow", fake_trace)
+
+    events = am.fetch_funding_events_raw(ex, "LBL", lookback_days=1)
+
+    assert events == []
+
+    skipped = [l for l in logs if "skipped non-final" in l]
+    assert skipped, "skip log missing"
+    assert any("id=1" in l and "label=LBL" in l for l in skipped)
+
+
 def test_missing_price_flows_reflected_in_excel(monkeypatch, tmp_path):
     events = [
         {"id": "1", "type": "deposit", "currency": "ABC", "amount": 10},

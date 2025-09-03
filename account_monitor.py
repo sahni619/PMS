@@ -565,6 +565,11 @@ def fetch_funding_events_raw(ex, label: str, lookback_days: Optional[int] = None
         st = ev.get("status")
         if _is_final(ex_id, kind, st):
             filtered.append(ev)
+        else:
+            ev_id = ev.get("id")
+            _trace_flow(label, [
+                f"FUNDING skipped non-final event label={label} id={ev_id} status={st}"
+            ])
 
     out = sorted(filtered, key=lambda r: r.get("timestamp", 0))
 
